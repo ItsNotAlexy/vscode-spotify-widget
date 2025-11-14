@@ -12,7 +12,7 @@ function getClientId() {
     return config.get('clientId', '');
 }
 
-const REDIRECT_URI = 'https://itsnotalexy.github.io/spotify-vscode-widget/callback.html';
+const REDIRECT_URI = 'https://itsnotalexy.github.io/vscode-spotify-widget-auth/callback';
 const SCOPES = 'user-read-playback-state user-modify-playback-state user-read-currently-playing';
 
 function activate(context) {
