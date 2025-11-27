@@ -50,7 +50,7 @@ Want to use your own Spotify client ID? Follow these steps:
 2. Search for "Spotify Widget"
 3. Set the `spotifyWidget.clientId` to your copied Client ID
 
-### 3. Authenticate
+#### 3. Authenticate
 
 1. Open Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`)
 2. Type "Authenticate with Spotify" and press Enter
