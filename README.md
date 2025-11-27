@@ -18,7 +18,20 @@ A beautiful Spotify player widget for Visual Studio Code that displays your curr
 
 ## Setup Instructions
 
-### 1. Create a Spotify Application (One Time Setup)
+### Automatic Setup
+1. Open Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`)
+2. Type "Authenticate with Spotify" and press Enter
+3. Click "Open Spotify Login"
+4. Log in to Spotify and authorize the app
+5. Copy the authorization code from the page
+6. Paste it back into VS Code
+7. Done! 🎉
+
+
+### Manual Setup
+Want to use your own Spotify client ID? Follow these steps:
+
+#### 1. Create a Spotify Application (One Time Setup)
 
 1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
 2. Log in with your Spotify account
@@ -31,11 +44,11 @@ A beautiful Spotify player widget for Visual Studio Code that displays your curr
 5. Save and open your app settings
 6. Copy your **Client ID** (NOT the Client Secret!)
 
-### 2. Configure VS Code
+#### 2. Configure VS Code
 
 1. Open VS Code Settings (`Ctrl+,` or `Cmd+,`)
 2. Search for "Spotify Widget"
-3. Paste your **Client ID** into `Spotify Widget: Client Id`
+3. Set the `spotifyWidget.clientId` to your copied Client ID
 
 ### 3. Authenticate
 
@@ -62,7 +75,7 @@ A beautiful Spotify player widget for Visual Studio Code that displays your curr
 }
 ```
 
-- **clientId**: Your Spotify App Client ID
+- **clientId**: Your Spotify App Client ID (Optional if using automatic setup)
 - **refreshInterval**: Update frequency in milliseconds (default: 1000ms)
 
 ## Requirements
@@ -73,7 +86,7 @@ A beautiful Spotify player widget for Visual Studio Code that displays your curr
 
 ## Security
 
-- Your Client ID is stored securely in VS Code settings
+- Your Client ID is stored securely in VS Code settings (Optional if using automatic setup)
 - Client Secret is NOT needed (uses PKCE flow)
 - Access tokens are stored locally and never shared
 - No third-party servers involved
@@ -82,7 +95,7 @@ A beautiful Spotify player widget for Visual Studio Code that displays your curr
 
 ### "Not authenticated" message
 - Run "Authenticate with Spotify" command
-- Make sure you set your Client ID in settings
+- Make sure you set your Client ID in settings (Optional if using automatic setup)
 
 ### Slow updates
 - Reduce refresh interval in settings (minimum 500ms recommended)
