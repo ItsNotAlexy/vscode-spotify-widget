@@ -2,7 +2,7 @@
   "name": "vscode-spotify-widget",
   "displayName": "Spotify Widget",
   "description": "A beautiful Spotify player widget for Visual Studio Code that displays your currently playing track with playback controls, designed to look like the Spotify mobile app.",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "publisher": "alexyssh",
   "author": {
     "name": "alexyssh",
@@ -28,7 +28,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onUri"
   ],
   "main": "./extension.js",
   "contributes": {

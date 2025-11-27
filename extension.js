@@ -9,11 +9,17 @@ let lastTrackId = null;
 
 function getClientId() {
     const config = vscode.workspace.getConfiguration('spotifyWidget');
-    return config.get('clientId', '');
+    if(config.get('clientId')) {
+        return config.get('clientId');
+    } else {
+        return 'ac8d0a8761004cfbb0b582950be8314c';
+    }
 }
 
 const REDIRECT_URI = 'https://itsnotalexy.github.io/vscode-spotify-widget-auth/callback';
 const SCOPES = 'user-read-playback-state user-modify-playback-state user-read-currently-playing';
+
+let pendingCodeVerifier = null;
 
 function activate(context) {
     console.log('Spotify Widget extension is now active');
@@ -23,6 +29,11 @@ function activate(context) {
     let authCommand = vscode.commands.registerCommand('spotify-widget.authenticate', async function () {
         await authenticateSpotify(context);
     });
+
+    let handleUriCommand = vscode.commands.registerCommand('spotify-widget.handleUri', async function (uri) {
+        await handleAuthCallback(uri, context);
+    });
+    
     let showCommand = vscode.commands.registerCommand('spotify-widget.show', function () {
         createOrShowSpotifyWidget(context);
     });
@@ -33,29 +44,75 @@ function activate(context) {
     });
 
     context.subscriptions.push(authCommand);
+    context.subscriptions.push(handleUriCommand);
     context.subscriptions.push(showCommand);
     context.subscriptions.push(hideCommand);
+
+    const uriHandler = {
+        handleUri: async (uri) => {
+            if (uri.path === '/auth') {
+                await handleAuthCallback(uri, context);
+            }
+        }
+    };
+    context.subscriptions.push(vscode.window.registerUriHandler(uriHandler));
 
     setTimeout(() => {
         createOrShowSpotifyWidget(context);
     }, 1000);
 }
 
+async function handleAuthCallback(uri, context) {
+    try {
+        const query = new URLSearchParams(uri.query);
+        const code = query.get('code');
+        
+        if (!code) {
+            vscode.window.showErrorMessage('No authorization code found in callback');
+            return;
+        }
+
+        const codeVerifier = pendingCodeVerifier || context.globalState.get('pendingCodeVerifier');
+        if (!codeVerifier) {
+            vscode.window.showErrorMessage('Authentication session expired. Please try again.');
+            return;
+        }
+        
+        const clientId = getClientId();
+        await completeAuthentication(code, codeVerifier, clientId, context);
+        
+        pendingCodeVerifier = null;
+        await context.globalState.update('pendingCodeVerifier', undefined);
+        
+    } catch (error) {
+        vscode.window.showErrorMessage('Failed to handle authentication callback: ' + error.message);
+    }
+}
+
+async function completeAuthentication(code, codeVerifier, clientId, context) {
+    try {
+        const tokens = await exchangeCodeForToken(code, codeVerifier, clientId);
+        
+        accessToken = tokens.access_token;
+        tokenExpiresAt = Date.now() + (tokens.expires_in * 1000);
+
+        await context.globalState.update('spotifyAccessToken', accessToken);
+        await context.globalState.update('spotifyTokenExpiresAt', tokenExpiresAt);
+
+        vscode.window.showInformationMessage('Successfully authenticated with Spotify!');
+    } catch (error) {
+        vscode.window.showErrorMessage('Authentication failed: ' + error.message);
+        throw error;
+    }
+}
+
 async function authenticateSpotify(context) {
     const clientId = getClientId();
-    
-    if (!clientId) {
-        const response = await vscode.window.showInformationMessage(
-            'Please set your Spotify Client ID in settings first.',
-            'Open Settings'
-        );
-        if (response === 'Open Settings') {
-            vscode.commands.executeCommand('workbench.action.openSettings', 'spotifyWidget.clientId');
-        }
-        return;
-    }
     const codeVerifier = generateRandomString(128);
     const codeChallenge = await generateCodeChallenge(codeVerifier);
+    pendingCodeVerifier = codeVerifier;
+    await context.globalState.update('pendingCodeVerifier', codeVerifier);
+    
     const authUrl = `https://accounts.spotify.com/authorize?` +
         `client_id=${clientId}&` +
         `response_type=code&` +
@@ -66,36 +123,69 @@ async function authenticateSpotify(context) {
         `show_dialog=true`;
 
     const result = await vscode.window.showInformationMessage(
-        'You will be redirected to Spotify to authenticate. After authorizing, copy the code from the page and paste it here.',
-        'Open Spotify Login'
+        'You will be redirected to Spotify to authenticate. After authorizing, you can either click "Open in VS Code" on the page or paste the code manually.',
+        'Open Spotify Login', 'Cancel'
     );
 
     if (result === 'Open Spotify Login') {
         vscode.env.openExternal(vscode.Uri.parse(authUrl));
         await new Promise(resolve => setTimeout(resolve, 2000));
         
-        const codeInput = await vscode.window.showInputBox({
-            prompt: 'Paste the authorization code from the page',
-            placeHolder: 'AQD...',
+        const manualInput = await vscode.window.showInputBox({
+            prompt: 'If auto-login didn\'t work, paste the authorization code from the page (or press Esc if already authenticated)',
+            placeHolder: 'AQD... (optional if you used "Open in VS Code" button)',
             ignoreFocusOut: true,
             password: false
         });
 
-        if (codeInput) {
-            try {
-                const tokens = await exchangeCodeForToken(codeInput.trim(), codeVerifier, clientId);
-                
-                accessToken = tokens.access_token;
-                tokenExpiresAt = Date.now() + (tokens.expires_in * 1000);
-
-                await context.globalState.update('spotifyAccessToken', accessToken);
-                await context.globalState.update('spotifyTokenExpiresAt', tokenExpiresAt);
-
-                vscode.window.showInformationMessage('Successfully authenticated with Spotify!');
-            } catch (error) {
-                vscode.window.showErrorMessage('Authentication failed: ' + error.message);
-            }
+        if (manualInput) {
+            await completeAuthentication(manualInput.trim(), codeVerifier, clientId, context);
         }
+    }
+}
+
+async function handleAuthCallback(uri, context) {
+    try {
+        const query = new URLSearchParams(uri.query);
+        const code = query.get('code');
+        
+        if (!code) {
+            vscode.window.showErrorMessage('No authorization code found in callback');
+            return;
+        }
+        
+        const codeVerifier = pendingCodeVerifier || context.globalState.get('pendingCodeVerifier');
+        
+        if (!codeVerifier) {
+            vscode.window.showErrorMessage('Authentication session expired. Please try again.');
+            return;
+        }
+        
+        const clientId = getClientId();
+        await completeAuthentication(code, codeVerifier, clientId, context);
+
+        pendingCodeVerifier = null;
+        await context.globalState.update('pendingCodeVerifier', undefined);
+        
+    } catch (error) {
+        vscode.window.showErrorMessage('Failed to handle authentication callback: ' + error.message);
+    }
+}
+
+async function completeAuthentication(code, codeVerifier, clientId, context) {
+    try {
+        const tokens = await exchangeCodeForToken(code, codeVerifier, clientId);
+        
+        accessToken = tokens.access_token;
+        tokenExpiresAt = Date.now() + (tokens.expires_in * 1000);
+
+        await context.globalState.update('spotifyAccessToken', accessToken);
+        await context.globalState.update('spotifyTokenExpiresAt', tokenExpiresAt);
+
+        vscode.window.showInformationMessage('Successfully authenticated with Spotify!');
+    } catch (error) {
+        vscode.window.showErrorMessage('Authentication failed: ' + error.message);
+        throw error;
     }
 }
 
