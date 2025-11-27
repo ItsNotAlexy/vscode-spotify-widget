@@ -39,7 +39,7 @@ Want to use your own Spotify client ID? Follow these steps:
 4. Fill in the details:
    - **App name**: VS Code Spotify Widget (or any name)
    - **App description**: Personal Spotify widget
-   - **Redirect URI**: `https://itsnotalexy.github.io/vscode-spotify-widget/callback`
+   - **Redirect URI**: `https://itsnotalexy.github.io/vscode-spotify-widget-auth/callback`
    - **Which API/SDKs are you planning to use?**: Web API
 5. Save and open your app settings
 6. Copy your **Client ID** (NOT the Client Secret!)
