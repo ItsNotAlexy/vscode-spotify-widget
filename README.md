@@ -23,8 +23,8 @@ A beautiful Spotify player widget for Visual Studio Code that displays your curr
 2. Type "Authenticate with Spotify" and press Enter
 3. Click "Open Spotify Login"
 4. Log in to Spotify and authorize the app
-5. Copy the authorization code from the page
-6. Paste it back into VS Code
+5. Click "Open in Visual Studio Code"
+6. Once redirected to the visual studio code window, Click "open uri" if prompted
 7. Done! 🎉
 
 
