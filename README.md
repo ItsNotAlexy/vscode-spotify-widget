@@ -71,12 +71,14 @@ Want to use your own Spotify client ID? Follow these steps:
 ```json
 {
   "spotifyWidget.clientId": "your_client_id_here",
-  "spotifyWidget.refreshInterval": 1000
+  "spotifyWidget.refreshInterval": 1000,
+  "spotifyWidget.showOnStartup": true
 }
 ```
 
 - **clientId**: Your Spotify App Client ID (Optional if using automatic setup)
 - **refreshInterval**: Update frequency in milliseconds (default: 1000ms)
+- **showOnStartup**: Shows the spotify player webview on window startup
 
 ## Requirements
 
@@ -97,13 +99,9 @@ Want to use your own Spotify client ID? Follow these steps:
 - Run "Authenticate with Spotify" command
 - Make sure you set your Client ID in settings (Optional if using automatic setup)
 
-### Slow updates
+### Short Delays
 - Reduce refresh interval in settings (minimum 500ms recommended)
 - Default is 1000ms for balance between speed and API limits
-
-### Token expired
-- Tokens last 1 hour
-- Just re-authenticate when needed (takes 10 seconds)
 
 ## Known Limitations
 - Currently only supports Windows for playback controls
