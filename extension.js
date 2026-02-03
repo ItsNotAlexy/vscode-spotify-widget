@@ -3,6 +3,7 @@ const https = require('https');
 let spotifyPanel = null;
 let updateInterval = null;
 let accessToken = null;
+let refreshToken = null;
 let tokenExpiresAt = null;
 let lastTrackId = null;
 
@@ -24,6 +25,7 @@ let pendingCodeVerifier = null;
 function activate(context) {
     console.log('Spotify Widget extension is now active');
     accessToken = context.globalState.get('spotifyAccessToken');
+    refreshToken = context.globalState.get('spotifyRefreshToken');
     tokenExpiresAt = context.globalState.get('spotifyTokenExpiresAt');
 
     let authCommand = vscode.commands.registerCommand('spotify-widget.authenticate', async function () {
@@ -57,9 +59,14 @@ function activate(context) {
     };
     context.subscriptions.push(vscode.window.registerUriHandler(uriHandler));
 
-    setTimeout(() => {
-        createOrShowSpotifyWidget(context);
-    }, 1000);
+    const config = vscode.workspace.getConfiguration('spotifyWidget');
+    const showOnStartup = config.get('showOnStartup', true);
+    
+    if (showOnStartup) {
+        setTimeout(() => {
+            createOrShowSpotifyWidget(context);
+        }, 1000);
+    }
 }
 
 async function handleAuthCallback(uri, context) {
@@ -94,9 +101,11 @@ async function completeAuthentication(code, codeVerifier, clientId, context) {
         const tokens = await exchangeCodeForToken(code, codeVerifier, clientId);
         
         accessToken = tokens.access_token;
+        refreshToken = tokens.refresh_token;
         tokenExpiresAt = Date.now() + (tokens.expires_in * 1000);
 
         await context.globalState.update('spotifyAccessToken', accessToken);
+        await context.globalState.update('spotifyRefreshToken', refreshToken);
         await context.globalState.update('spotifyTokenExpiresAt', tokenExpiresAt);
 
         vscode.window.showInformationMessage('Successfully authenticated with Spotify!');
@@ -141,51 +150,6 @@ async function authenticateSpotify(context) {
         if (manualInput) {
             await completeAuthentication(manualInput.trim(), codeVerifier, clientId, context);
         }
-    }
-}
-
-async function handleAuthCallback(uri, context) {
-    try {
-        const query = new URLSearchParams(uri.query);
-        const code = query.get('code');
-        
-        if (!code) {
-            vscode.window.showErrorMessage('No authorization code found in callback');
-            return;
-        }
-        
-        const codeVerifier = pendingCodeVerifier || context.globalState.get('pendingCodeVerifier');
-        
-        if (!codeVerifier) {
-            vscode.window.showErrorMessage('Authentication session expired. Please try again.');
-            return;
-        }
-        
-        const clientId = getClientId();
-        await completeAuthentication(code, codeVerifier, clientId, context);
-
-        pendingCodeVerifier = null;
-        await context.globalState.update('pendingCodeVerifier', undefined);
-        
-    } catch (error) {
-        vscode.window.showErrorMessage('Failed to handle authentication callback: ' + error.message);
-    }
-}
-
-async function completeAuthentication(code, codeVerifier, clientId, context) {
-    try {
-        const tokens = await exchangeCodeForToken(code, codeVerifier, clientId);
-        
-        accessToken = tokens.access_token;
-        tokenExpiresAt = Date.now() + (tokens.expires_in * 1000);
-
-        await context.globalState.update('spotifyAccessToken', accessToken);
-        await context.globalState.update('spotifyTokenExpiresAt', tokenExpiresAt);
-
-        vscode.window.showInformationMessage('Successfully authenticated with Spotify!');
-    } catch (error) {
-        vscode.window.showErrorMessage('Authentication failed: ' + error.message);
-        throw error;
     }
 }
 
@@ -246,7 +210,65 @@ function exchangeCodeForToken(code, codeVerifier, clientId) {
     });
 }
 
+function refreshAccessToken(clientId, context) {
+    return new Promise((resolve, reject) => {
+        if (!refreshToken) {
+            reject(new Error('No refresh token available'));
+            return;
+        }
+
+        const postData = new URLSearchParams({
+            client_id: clientId,
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken
+        }).toString();
+
+        const options = {
+            hostname: 'accounts.spotify.com',
+            path: '/api/token',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Content-Length': Buffer.byteLength(postData)
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', async () => {
+                if (res.statusCode === 200) {
+                    const tokens = JSON.parse(data);
+                    accessToken = tokens.access_token;
+                    tokenExpiresAt = Date.now() + (tokens.expires_in * 1000);
+                    
+                    // Update refresh token if a new one is provided
+                    if (tokens.refresh_token) {
+                        refreshToken = tokens.refresh_token;
+                        await context.globalState.update('spotifyRefreshToken', refreshToken);
+                    }
+                    
+                    await context.globalState.update('spotifyAccessToken', accessToken);
+                    await context.globalState.update('spotifyTokenExpiresAt', tokenExpiresAt);
+                    
+                    console.log('Access token refreshed successfully');
+                    resolve(tokens);
+                } else {
+                    reject(new Error(`Token refresh failed: ${data}`));
+                }
+            });
+        });
+
+        req.on('error', reject);
+        req.write(postData);
+        req.end();
+    });
+}
+
 function createOrShowSpotifyWidget(context) {
+    // Store context for token refresh
+    getCurrentTrack.context = context;
+    
     if (spotifyPanel) {
         spotifyPanel.reveal(vscode.ViewColumn.Two);
         return;
@@ -315,8 +337,20 @@ function createOrShowSpotifyWidget(context) {
 }
 
 async function getCurrentTrack() {
-    if (tokenExpiresAt && Date.now() >= tokenExpiresAt) {
-        return createEmptyTrackInfo('Token expired', 'Please re-authenticate with Spotify');
+    // Check if token is expired or about to expire (within 5 minutes)
+    if (tokenExpiresAt && Date.now() >= (tokenExpiresAt - 5 * 60 * 1000)) {
+        if (refreshToken) {
+            try {
+                const clientId = getClientId();
+                // Pass the context from the activate function
+                await refreshAccessToken(clientId, getCurrentTrack.context);
+            } catch (error) {
+                console.error('Failed to refresh token:', error);
+                return createEmptyTrackInfo('Token expired', 'Please re-authenticate with Spotify');
+            }
+        } else {
+            return createEmptyTrackInfo('Token expired', 'Please re-authenticate with Spotify');
+        }
     }
     if (!accessToken) {
         return createEmptyTrackInfo('Not authenticated', 'Run "Authenticate with Spotify" command');

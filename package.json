@@ -61,6 +61,12 @@
           "default": 1000,
           "description": "Refresh interval in milliseconds for updating currently playing track (1000ms = 1 second)",
           "order": 2
+        },
+        "spotifyWidget.showOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically show the Spotify widget when VS Code starts",
+          "order": 3
         }
       }
     }
